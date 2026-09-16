@@ -3,6 +3,25 @@ import { getDb, migrate } from '@/db';
 
 export const runtime = 'nodejs';
 
+/** GET /api/candidates/[id] — full candidate row (extract_json/score_json included). */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const candidateId = Number(id);
+  if (!Number.isInteger(candidateId)) {
+    return NextResponse.json({ error: 'invalid candidate id' }, { status: 400 });
+  }
+  migrate();
+  const db = getDb();
+  const row = db.prepare(`SELECT * FROM candidates WHERE id = ?`).get(candidateId);
+  if (!row) {
+    return NextResponse.json({ error: 'candidate not found' }, { status: 404 });
+  }
+  return NextResponse.json(row);
+}
+
 /** PATCH /api/candidates/[id] — human verdict override. body: {human_verdict?, human_note?} */
 export async function PATCH(
   request: Request,
