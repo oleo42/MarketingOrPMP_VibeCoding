@@ -120,6 +120,22 @@ export default function CandidateDrawer({ candidateId, onClose, onSaved }: Props
           {loading && <p className="text-sm text-gray-500">加载中…</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
+          {detail && detail.parse_status === 'needs_manual' && (
+            <section className="rounded border border-amber-300 bg-amber-50 p-4">
+              <h3 className="mb-1 text-sm font-semibold text-amber-800">需要人工处理</h3>
+              <p className="text-sm text-amber-900">
+                {(() => {
+                  try {
+                    return JSON.parse(detail.score_json ?? '{}').reason ??
+                      '此 PDF 无文本层，自动解析无法读取内容。';
+                  } catch {
+                    return '此 PDF 无文本层，自动解析无法读取内容。请人工查看原文。';
+                  }
+                })()}
+              </p>
+            </section>
+          )}
+
           {detail && (
             <>
               <section>

@@ -31,9 +31,18 @@ async function runPipeline(
   const { text, needsManual } = await parsePdf(candidate.file_path);
 
   if (needsManual) {
-    db.prepare(`UPDATE candidates SET parse_status = 'needs_manual' WHERE id = ?`).run(
-      candidate.id
-    );
+    // 无文本层 PDF（设计版/扫描版）：不调 LLM，但留一条人话解释，
+    // 让详情页有内容可显示，而不是 extract/score 全 null 的空白。
+    const note = {
+      verdict: 'needs_manual',
+      score: null,
+      reason:
+        '此 PDF 无文本层（设计软件导出或扫描件），自动解析无法读取内容。请人工查看原文，或重新上传 Word/WPS 导出的带文本层 PDF。',
+      risks: [],
+    };
+    db.prepare(
+      `UPDATE candidates SET parse_status = 'needs_manual', score_json = ? WHERE id = ?`
+    ).run(JSON.stringify(note), candidate.id);
     return { inputTokens: 0, outputTokens: 0 };
   }
 
