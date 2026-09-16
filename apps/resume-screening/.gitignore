@@ -13,3 +13,8 @@ next-env.d.ts
 data.db
 data.db-*
 uploads/
+logs/
+data*.db
+data*.db-wal
+data*.db-shm
+uploads/

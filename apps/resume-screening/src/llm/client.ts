@@ -44,9 +44,14 @@ const EXTRACT_SYSTEM = `You are a resume parser. Extract structured fields from 
 const SCORE_SYSTEM = `You are a recruiter. Given a job description and a structured resume extract, output ONLY a JSON object (no markdown, no commentary) matching this shape:
 {"verdict": "recommend"|"hold"|"reject", "score": number 0-100, "reason": string (<=300 chars), "risks": string[]}`;
 
-export async function extractResume(
-  text: string
-): Promise<{ data: ExtractResult; usage: Usage }> {
+export interface LlmCallResult<T> {
+  data: T;
+  usage: Usage;
+  /** 闸口3：LLM 原始响应文本，用于排障 zod 解析失败/截断/输出异常 */
+  raw: string;
+}
+
+export async function extractResume(text: string): Promise<LlmCallResult<ExtractResult>> {
   return callWithRetry(async () => {
     const res = await getProvider().chat({
       model: EXTRACT_MODEL,
@@ -55,14 +60,18 @@ export async function extractResume(
       user: text,
     });
     const data = parseJson(res.text, ExtractSchema);
-    return { data, usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens } };
+    return {
+      data,
+      usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens },
+      raw: res.text,
+    };
   });
 }
 
 export async function scoreCandidate(
   jd: string,
   extract: ExtractResult
-): Promise<{ data: ScoreResult; usage: Usage }> {
+): Promise<LlmCallResult<ScoreResult>> {
   return callWithRetry(async () => {
     const res = await getProvider().chat({
       model: SCORE_MODEL,
@@ -71,6 +80,10 @@ export async function scoreCandidate(
       user: `Job description:\n${jd}\n\nResume extract:\n${JSON.stringify(extract, null, 2)}`,
     });
     const data = parseJson(res.text, ScoreSchema);
-    return { data, usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens } };
+    return {
+      data,
+      usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens },
+      raw: res.text,
+    };
   });
 }
