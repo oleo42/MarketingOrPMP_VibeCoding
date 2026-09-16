@@ -6,18 +6,38 @@
 
 1. **系统方案库**（17 项）—— 三大业务域可 vibe 的系统清单，含数据来源、核心 AI 环节、工程量及依据
 2. **工程加速方法论** —— 需求不精简前提下的四条工程加速路径（多 Agent 并行 / 模型分层 / Worktree 隔离 / 规约驱动开发），附外部研究佐证与代价对比
-3. **实现**（进行中）—— 母模板先行，按复用链逐域落地
+3. **实现** —— 母模板先行，按复用链逐域落地。Wave 1 简历初筛 Agent 已交付（真实 LLM 端到端验证通过）
 
 
 ## 目录
 
 ```
+template/                      # 母模板 + 《Agent 工程化手册》(README.md)
+  src/{db,llm,lib,components}  # 可复用骨架：数据接入→LLM批处理→人工审核→看板/导出
+apps/
+  resume-screening/            # Wave 1 实例：简历初筛 Agent（可 npm run dev）
 docs/
   RECORDS.md                                        记录台账（所有关键产出登记）
   analysis/
     2026-09-16-vibecoding-catalog-and-acceleration.md   系统清单 + 工程量 + 加速方案（核心文档）
+  specs/   plans/                                   各系统 spec 与实施计划
 .omp/AGENTS.md                                      项目约定
 ```
+
+## 快速开始
+
+**跑 Wave 1 实例（简历初筛 Agent）：**
+
+```bash
+cd apps/resume-screening
+npm install
+cp .env.example .env.local        # 编辑填入 LLM key
+npm run dev                        # 打开 http://localhost:3000
+```
+
+LLM provider 默认 Volcengine Ark（Coding Plan），在 `.env.local` 配 `VOLCENGINE_API_KEYwinomp=<key>`；切 Anthropic 则设 `LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`。详见 `.env.example` 与 `template/README.md`。
+
+**做一个新系统：** 按 `template/README.md`（《Agent 工程化手册》）的五步流程——复制 template → 定义 schema → 写领域 prompt → 配置队列列 → 接数据源。
 
 ## 方案库速览
 
