@@ -13,3 +13,5 @@
 | 2026-09-16 | Wave 1 简历初筛 Agent 交付（真实 Ark LLM 端到端验证通过：上传→打分→审核队列→改判→导出 CSV 全链路） | apps/resume-screening/（spec: docs/specs/2026-09-16-resume-screening-agent.md，plan: docs/plans/2026-09-16-resume-screening-agent.md） | 已记录 | 首个可演示系统；母模板的事实来源 |
 | 2026-09-16 | 母模板 + 《Agent 工程化手册》（四段式架构 + 5 步新系统流程 + 17 系统定制索引 + 三条红线） | template/（手册: template/README.md，模式: template/docs/patterns.md） | 已记录 | 后续 14 个系统复用基础；业务专家自助开发指南（JD 核心交付物） |
 | 2026-09-16 | 初次运行问题修复：设计版/扫描版 PDF(无文本层) needs_manual 人话解释+drawer 琥珀横幅；修复 DB 测试隔离缺陷；5 份真实风格中文简历验证 5/5 scored | apps/resume-screening/（commit d572cf9） | 已记录 | 确认现有 pipeline 对有文本层简历 100% 有效，视觉模型非必需；无文本层简历需人工或重传 |
+| 2026-09-16 | 四闸口日志体系（用户"不漏掉任何问题"哲学的工程落地）：闸口1进程边界(pino+进程兜底+消静默catch)/闸口2浏览器边界(global-error+onerror回传，覆盖hydration)/闸口3 LLM边界(llm_raw原始响应)/闸口4数据边界(candidate_events状态迁移)；4闸口各触发一次验证通过；顺带修复pino-pretty与Next dev冲突 | apps/resume-screening/（commit 07a549a） | 已记录 | 任何错误必在一个闸口现形，排障不再靠猜 |
+| 2026-09-16 | 四闸口泛化进 template/ + 手册新增第7章可观测性方法论（核心哲学/四闸口表/为什么4不是8/环境只抓分叉点/裁掉的冗余/踩坑） | template/（commit ac89f7e，手册 template/README.md §7） | 已记录 | 14个系统统一的可观测性基础；方法论可复用于任何"文件→LLM→审核"系统 |
