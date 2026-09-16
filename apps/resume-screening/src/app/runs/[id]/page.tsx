@@ -73,6 +73,8 @@ export default function RunPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverMsg, setRecoverMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +91,34 @@ export default function RunPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // D4：恢复处理——stuck processing（dev 热重载/崩溃中断后台任务）或有 failed 候选人时，
+  // 允许重新触发 process。后端已有并发守卫（409），重复点击安全。
+  async function handleRecover() {
+    setRecovering(true);
+    setRecoverMsg(null);
+    try {
+      // 先把 stuck 的 processing 复位为 pending，否则后端 409 拒绝。
+      if (run?.status === 'processing') {
+        await fetch(`/api/runs/${runId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset_processing: true }),
+        });
+      }
+      const res = await fetch(`/api/runs/${runId}/process`, { method: 'POST' });
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string; pending?: number }
+        | null;
+      if (!res.ok) throw new Error(body?.error ?? `恢复失败 (${res.status})`);
+      setRecoverMsg(`已恢复处理（${body?.pending ?? 0} 个待处理）`);
+      await load();
+    } catch (e) {
+      setRecoverMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRecovering(false);
+    }
+  }
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -146,13 +176,26 @@ export default function RunPage() {
               {run.output_tokens}
             </p>
           )}
+          {recoverMsg && <p className="mt-1 text-xs text-amber-700">{recoverMsg}</p>}
         </div>
-        <a
-          href={`/api/runs/${runId}/export`}
-          className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          导出 CSV
-        </a>
+        <div className="flex items-center gap-2">
+          {run && (run.status === 'processing' || counts.needs_review > 0) && (
+            <button
+              type="button"
+              onClick={handleRecover}
+              disabled={recovering}
+              className="rounded border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            >
+              {recovering ? '恢复中…' : run.status === 'processing' ? '恢复处理' : '重试失败项'}
+            </button>
+          )}
+          <a
+            href={`/api/runs/${runId}/export`}
+            className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            导出 CSV
+          </a>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
