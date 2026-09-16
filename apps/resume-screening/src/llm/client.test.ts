@@ -1,29 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import type { ExtractResult } from './schemas';
-
-// Shared mock for the Anthropic messages.create call. vi.mock is hoisted,
-// so grab the fn via the mocked module after import.
-import Anthropic from '@anthropic-ai/sdk';
 import { extractResume, scoreCandidate } from './client';
+import { getProvider } from './providers';
+import type { ChatResponse } from './providers';
 
-vi.mock('@anthropic-ai/sdk', () => {
-  const create = vi.fn();
-  class MockAnthropic {
-    messages = { create };
-  }
-  return { default: MockAnthropic, __mockCreate: create };
+vi.mock('./providers', () => {
+  const chat = vi.fn();
+  return { getProvider: () => ({ chat }), __mockChat: chat };
 });
 
-function mockCreate(): Mock {
-  return (new Anthropic() as unknown as { messages: { create: Mock } }).messages.create;
+function mockChat(): Mock {
+  return (getProvider() as unknown as { chat: Mock }).chat;
 }
 
-function makeResponse(text: string, inputTokens = 10, outputTokens = 20) {
-  return {
-    content: [{ type: 'text', text }],
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens },
-  };
+function makeChat(text: string, inputTokens = 10, outputTokens = 20): ChatResponse {
+  return { text, inputTokens, outputTokens };
 }
 
 const validExtract = {
@@ -42,96 +33,77 @@ const validScore = {
 };
 
 beforeEach(() => {
-  mockCreate().mockReset();
+  mockChat().mockReset();
 });
 
 describe('extractResume', () => {
   it('returns parsed data and usage on success', async () => {
-    mockCreate().mockResolvedValueOnce(makeResponse(JSON.stringify(validExtract), 100, 50));
-
-    const result = await extractResume('resume text');
-
-    expect(result.data).toEqual(validExtract);
-    expect(result.usage).toEqual({ input_tokens: 100, output_tokens: 50 });
-    expect(mockCreate()).toHaveBeenCalledTimes(1);
-    const callArg = mockCreate().mock.calls[0][0] as { model: string };
-    expect(callArg.model).toBe('claude-sonnet-4-5');
+    mockChat().mockResolvedValueOnce(makeChat(JSON.stringify(validExtract), 11, 22));
+    const { data, usage } = await extractResume('resume text');
+    expect(data).toEqual(validExtract);
+    expect(usage).toEqual({ input_tokens: 11, output_tokens: 22 });
   });
 
-  it('strips markdown fences and JSON-decodes', async () => {
-    mockCreate().mockResolvedValueOnce(makeResponse('```json\n' + JSON.stringify(validExtract) + '\n```'));
-
-    const result = await extractResume('resume text');
-    expect(result.data).toEqual(validExtract);
+  it('strips markdown code fences before parsing', async () => {
+    mockChat().mockResolvedValueOnce(makeChat('```json\n' + JSON.stringify(validExtract) + '\n```'));
+    const { data } = await extractResume('resume text');
+    expect(data).toEqual(validExtract);
   });
 
-  it('retries once on failure then succeeds', async () => {
-    mockCreate()
+  it('retries once on network error then succeeds', async () => {
+    mockChat()
       .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce(makeResponse(JSON.stringify(validExtract)));
-
-    const result = await extractResume('resume text');
-    expect(result.data).toEqual(validExtract);
-    expect(mockCreate()).toHaveBeenCalledTimes(2);
+      .mockResolvedValueOnce(makeChat(JSON.stringify(validExtract)));
+    const { data } = await extractResume('resume text');
+    expect(data).toEqual(validExtract);
+    expect(mockChat()).toHaveBeenCalledTimes(2);
   });
 
   it('throws after two consecutive failures', async () => {
-    mockCreate().mockRejectedValue(new Error('persistent'));
-
-    await expect(extractResume('resume text')).rejects.toThrow('persistent');
-    expect(mockCreate()).toHaveBeenCalledTimes(2);
+    mockChat().mockRejectedValue(new Error('network'));
+    await expect(extractResume('resume text')).rejects.toThrow('network');
+    expect(mockChat()).toHaveBeenCalledTimes(2);
   });
 
-  it('throws after retry when zod validation fails twice', async () => {
-    const badResponse = makeResponse(JSON.stringify({ name: 'Alice' })); // missing fields
-    mockCreate().mockResolvedValue(badResponse);
-
+  it('retries once on zod validation failure then throws', async () => {
+    const bad = { ...validExtract, years_experience: 'five' };
+    mockChat().mockResolvedValue(makeChat(JSON.stringify(bad)));
     await expect(extractResume('resume text')).rejects.toThrow();
-    expect(mockCreate()).toHaveBeenCalledTimes(2);
+    expect(mockChat()).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects malformed JSON', async () => {
-    mockCreate().mockResolvedValue(makeResponse('not json at all'));
-
-    await expect(extractResume('resume text')).rejects.toThrow();
+  it('rejects malformed JSON with no object', async () => {
+    mockChat().mockResolvedValue(makeChat('not json at all'));
+    await expect(extractResume('resume text')).rejects.toThrow('No JSON object');
   });
 });
 
 describe('scoreCandidate', () => {
-  it('returns parsed data and usage on success', async () => {
-    mockCreate().mockResolvedValueOnce(makeResponse(JSON.stringify(validScore), 200, 80));
+  const extract = validExtract;
 
-    const result = await scoreCandidate('JD text', validExtract as ExtractResult);
-
-    expect(result.data).toEqual(validScore);
-    expect(result.usage).toEqual({ input_tokens: 200, output_tokens: 80 });
-    const callArg = mockCreate().mock.calls[0][0] as { model: string };
-    expect(callArg.model).toBe('claude-opus-4-5');
+  it('returns parsed score and usage on success', async () => {
+    mockChat().mockResolvedValueOnce(makeChat(JSON.stringify(validScore), 33, 44));
+    const { data, usage } = await scoreCandidate('jd text', extract);
+    expect(data).toEqual(validScore);
+    expect(usage).toEqual({ input_tokens: 33, output_tokens: 44 });
   });
 
-  it('rejects out-of-range score via zod', async () => {
-    mockCreate().mockResolvedValue(makeResponse(JSON.stringify({ ...validScore, score: 150 })));
-
-    await expect(scoreCandidate('JD', validExtract as ExtractResult)).rejects.toThrow();
-    expect(mockCreate()).toHaveBeenCalledTimes(2); // retried once
+  it('rejects score out of range', async () => {
+    mockChat().mockResolvedValue(makeChat(JSON.stringify({ ...validScore, score: 150 })));
+    await expect(scoreCandidate('jd text', extract)).rejects.toThrow();
   });
 
   it('rejects invalid verdict enum', async () => {
-    mockCreate().mockResolvedValue(makeResponse(JSON.stringify({ ...validScore, verdict: 'maybe' })));
-
-    await expect(scoreCandidate('JD', validExtract as ExtractResult)).rejects.toThrow();
+    mockChat().mockResolvedValue(makeChat(JSON.stringify({ ...validScore, verdict: 'maybe' })));
+    await expect(scoreCandidate('jd text', extract)).rejects.toThrow();
   });
 
   it('includes JD and extract in user message', async () => {
-    mockCreate().mockResolvedValueOnce(makeResponse(JSON.stringify(validScore)));
-
-    await scoreCandidate('Frontend JD', validExtract as ExtractResult);
-
-    const callArg = mockCreate().mock.calls[0][0] as {
-      messages: { role: string; content: string }[];
-    };
-    const userMsg = callArg.messages.find((m) => m.role === 'user');
-    expect(userMsg?.content).toContain('Frontend JD');
-    expect(userMsg?.content).toContain('Alice');
+    mockChat().mockResolvedValueOnce(makeChat(JSON.stringify(validScore)));
+    await scoreCandidate('Senior React role', extract);
+    const call = mockChat().mock.calls[0][0];
+    expect(call.user).toContain('Senior React role');
+    expect(call.user).toContain('Alice');
+    expect(call.system).toContain('recruiter');
   });
 });

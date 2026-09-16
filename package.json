@@ -1,0 +1,19 @@
+{
+  "name": "marketingorpmp_vibecoding",
+  "version": "1.0.0",
+  "description": "面向消费电子企业业务场景的 **VibeCoding 方案库**：用 agentic coding 工具（Claude Code / Codex）为市场营销（GTM）、研发项目管理（IPD）、招聘与人才管理三大业务域设计和交付可生产的 Agent 系统，并沉淀工程化方法让业务专家能自助开发简单 Agent。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "pdfkit": "^0.20.2"
+  }
+}

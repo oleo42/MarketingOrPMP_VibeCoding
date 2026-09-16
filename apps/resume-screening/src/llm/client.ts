@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   ExtractSchema,
   ScoreSchema,
@@ -6,28 +5,22 @@ import {
   type ScoreResult,
   type Usage,
 } from './schemas';
+import { getProvider } from './providers';
 
-const client = new Anthropic(); // ANTHROPIC_API_KEY from env
-
-const EXTRACT_MODEL = 'claude-sonnet-4-5';
-const SCORE_MODEL = 'claude-opus-4-5';
+// 模型常量按 provider 区分；ark 用 Coding Plan 支持的模型
+const PROVIDER = (process.env.LLM_PROVIDER || 'ark').toLowerCase();
+const EXTRACT_MODEL =
+  process.env.EXTRACT_MODEL || (PROVIDER === 'anthropic' ? 'claude-sonnet-4-5' : 'ark-code-latest');
+const SCORE_MODEL =
+  process.env.SCORE_MODEL || (PROVIDER === 'anthropic' ? 'claude-opus-4-5' : 'ark-code-latest');
 
 async function callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    const { promise, resolve } = Promise.withResolvers<void>();
-    setTimeout(resolve, 500);
-    await promise;
+    await new Promise((r) => setTimeout(r, 500));
     return fn();
   }
-}
-function extractText(response: Anthropic.Message): string {
-  const block = response.content.find((b) => b.type === 'text');
-  if (!block || block.type !== 'text') {
-    throw new Error('No text block in Anthropic response');
-  }
-  return block.text;
 }
 
 function parseJson<T>(raw: string, schema: { parse: (v: unknown) => T }): T {
@@ -55,20 +48,14 @@ export async function extractResume(
   text: string
 ): Promise<{ data: ExtractResult; usage: Usage }> {
   return callWithRetry(async () => {
-    const response = await client.messages.create({
+    const res = await getProvider().chat({
       model: EXTRACT_MODEL,
-      max_tokens: 2048,
+      maxTokens: 2048,
       system: EXTRACT_SYSTEM,
-      messages: [{ role: 'user', content: text }],
+      user: text,
     });
-    const data = parseJson(extractText(response), ExtractSchema);
-    return {
-      data,
-      usage: {
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
-      },
-    };
+    const data = parseJson(res.text, ExtractSchema);
+    return { data, usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens } };
   });
 }
 
@@ -77,24 +64,13 @@ export async function scoreCandidate(
   extract: ExtractResult
 ): Promise<{ data: ScoreResult; usage: Usage }> {
   return callWithRetry(async () => {
-    const response = await client.messages.create({
+    const res = await getProvider().chat({
       model: SCORE_MODEL,
-      max_tokens: 2048,
+      maxTokens: 2048,
       system: SCORE_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content: `Job description:\n${jd}\n\nResume extract:\n${JSON.stringify(extract, null, 2)}`,
-        },
-      ],
+      user: `Job description:\n${jd}\n\nResume extract:\n${JSON.stringify(extract, null, 2)}`,
     });
-    const data = parseJson(extractText(response), ScoreSchema);
-    return {
-      data,
-      usage: {
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
-      },
-    };
+    const data = parseJson(res.text, ScoreSchema);
+    return { data, usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens } };
   });
 }
