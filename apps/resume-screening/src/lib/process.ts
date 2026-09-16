@@ -1,6 +1,14 @@
 import { getDb } from '../db';
-import { extractResume, scoreCandidate } from '../llm/client';
+import * as realLlm from '../llm/client';
 import { parsePdf } from './pdf';
+
+type Llm = Pick<typeof realLlm, 'extractResume' | 'scoreCandidate'>;
+let llm: Llm = realLlm;
+
+/** Swap the LLM implementation (used by scripts/smoke.ts to avoid real API calls). */
+export function setLlm(impl: Llm): void {
+  llm = impl;
+}
 
 interface CandidateRow {
   id: number;
@@ -29,12 +37,12 @@ async function runPipeline(
     return { inputTokens: 0, outputTokens: 0 };
   }
 
-  const { data: extract, usage: extractUsage } = await extractResume(text);
+  const { data: extract, usage: extractUsage } = await llm.extractResume(text);
   db.prepare(
     `UPDATE candidates SET extract_json = ?, parse_status = 'extracted' WHERE id = ?`
   ).run(JSON.stringify(extract), candidate.id);
 
-  const { data: score, usage: scoreUsage } = await scoreCandidate(jdText, extract);
+  const { data: score, usage: scoreUsage } = await llm.scoreCandidate(jdText, extract);
   db.prepare(
     `UPDATE candidates SET score_json = ?, ai_verdict = ?, ai_score = ?, parse_status = 'scored' WHERE id = ?`
   ).run(JSON.stringify(score), score.verdict, score.score, candidate.id);
