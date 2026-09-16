@@ -10,3 +10,5 @@
 | 2026-09-16 | 项目发布：oleo42/MarketingOrPMP_VibeCoding（公开仓，SSH 别名推送） | https://github.com/oleo42/MarketingOrPMP_VibeCoding（remote: oleo42 = git@github-oleo42） | 已记录 | 方案库与后续实现的公开主页 |
 | 2026-09-16 | 凭据地图新增"多账号身份一致性"规则（建仓即设 repo-local noreply 身份） | D:/omp/platform/agent/AGENTS.md §凭据地图（已 deploy） | 已记录 | 防止再次出现发布账号与贡献者不一致 |
 | 2026-09-16 | 仓库重建：删旧仓（含悬空 Leon commit）→ oleo42 名下重建公开仓 → 推送干净历史（2 commit 全 oleo42） | https://github.com/oleo42/MarketingOrPMP_VibeCoding | 已记录 | contributors/commits API 实查均仅 oleo42，归属一致闭环 |
+| 2026-09-16 | Wave 1 简历初筛 Agent 交付（真实 Ark LLM 端到端验证通过：上传→打分→审核队列→改判→导出 CSV 全链路） | apps/resume-screening/（spec: docs/specs/2026-09-16-resume-screening-agent.md，plan: docs/plans/2026-09-16-resume-screening-agent.md） | 已记录 | 首个可演示系统；母模板的事实来源 |
+| 2026-09-16 | 母模板 + 《Agent 工程化手册》（四段式架构 + 5 步新系统流程 + 17 系统定制索引 + 三条红线） | template/（手册: template/README.md，模式: template/docs/patterns.md） | 已记录 | 后续 14 个系统复用基础；业务专家自助开发指南（JD 核心交付物） |
