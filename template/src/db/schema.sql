@@ -49,3 +49,19 @@ CREATE TABLE IF NOT EXISTS items(
   human_note TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 闸口4：状态迁移事件表（从 candidate_events 泛化：candidate_id→item_id, run_id→batch_id）。
+-- 每次状态跳转留痕，异常状态（failed/needs_manual）自然显形，详情页直接可读。
+-- detail 列是 JSON：{text_len, tokens, error, model, duration_ms, llm_raw}——
+-- llm_raw 是闸口3 的落点（LLM 原始响应，zod 失败/截断时在此溯源）。
+CREATE TABLE IF NOT EXISTS item_events(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INT NOT NULL REFERENCES items(id),
+  batch_id INT NOT NULL REFERENCES batches(id),
+  event TEXT NOT NULL,          -- parse_start/parse_done/extract_start/extract_done/score_start/score_done/failed/needs_manual
+  from_status TEXT,
+  to_status TEXT,
+  detail TEXT,                  -- JSON: {text_len, tokens, error, model, duration_ms, llm_raw}
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_events_item ON item_events(item_id);

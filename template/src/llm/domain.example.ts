@@ -2,6 +2,8 @@
 // 领域层示例（仅供参考，复制时改名为 domain.ts 并整体重写）
 // 新系统第 3 步"写领域 prompt"就是写这个文件：
 // 两个 system prompt + 两个 zod schema，其余全部复用骨架。
+// 注意：返回值原样透传 runLlmTask 的 raw（闸口3）——process.ts 会把它落进
+// item_events.detail.llm_raw，LLM 输出异常时靠它溯源。不要把 raw 丢掉。
 // 下面以"会议→行动项抽取"为例演示写法（非简历业务）。
 // ============================================================
 import { z } from 'zod';
@@ -30,7 +32,9 @@ type MeetingExtract = z.infer<typeof MeetingExtractSchema>;
 const EXTRACT_SYSTEM = `You are a meeting-minutes parser. Extract structured action items and decisions from the transcript and output ONLY a JSON object (no markdown, no commentary) matching this shape:
 {"display_name": string, "fields": {"action_items": [{"owner": string, "task": string, "deadline": string|null}], "decisions": string[]}, "raw_summary": string (<=200 chars)}`;
 
-export function extractMeeting(transcript: string): Promise<{ data: MeetingExtract; usage: Usage }> {
+export function extractMeeting(
+  transcript: string
+): Promise<{ data: MeetingExtract; usage: Usage; raw: string }> {
   return runLlmTask({
     tier: 'extract',
     system: EXTRACT_SYSTEM,
@@ -54,7 +58,7 @@ const SCORE_SYSTEM = `You are a program manager. Given the project context and a
 export function triageMeeting(
   context: string,
   extract: MeetingExtract
-): Promise<{ data: TriageScore; usage: Usage }> {
+): Promise<{ data: TriageScore; usage: Usage; raw: string }> {
   return runLlmTask({
     tier: 'score',
     system: SCORE_SYSTEM,

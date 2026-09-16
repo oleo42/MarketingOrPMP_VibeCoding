@@ -16,6 +16,7 @@
 4. [17 个可复用系统定制索引](#4-17-个可复用系统定制索引)
 5. [三条业务红线（不可违反）](#5-三条业务红线)
 6. [技术底座速查](#6-技术底座速查)
+7. [可观测性：四闸口日志体系](#7-可观测性四闸口日志体系)
 
 ---
 
@@ -204,7 +205,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## 6. 技术底座速查
 
 - **技术栈**：Next.js 15（App Router）· TypeScript · Tailwind · better-sqlite3（WAL，单文件，免运维）· zod · Vitest。
-- **本目录代码**：`src/db`（单例+迁移）· `src/llm`（provider/重试/JSON 解析/模型分层）· `src/lib`（pdf/csv/批处理 pipeline）· `src/components`（ReviewTable/ReviewDrawer）· `src/llm/domain.example.ts`（领域层写法示例，会议行动项）。每个文件头部注释写明"从哪泛化、保留什么、哪里必须改"。
+- **本目录代码**：`src/db`（单例+迁移）· `src/llm`（provider/重试/JSON 解析/模型分层）· `src/lib`（pdf/csv/批处理 pipeline/logger）· `src/components`（ReviewTable/ReviewDrawer/ClientErrorReporter）· `src/app`（global-error、api/log/client）· `src/instrumentation.ts`（进程兜底挂载）· `src/llm/domain.example.ts`（领域层写法示例，会议行动项）。每个文件头部注释写明"从哪泛化、保留什么、哪里必须改"。
 - **模式细节**：`docs/patterns.md`（每段职责/可替换点/坑/段间契约）。
 - **参考实例**：`apps/resume-screening/`（可跑、有 22 个单测 + 无 key 冒烟脚本）。
 - **模板定位**：供复制的骨架，语法已验证（tsc 通过）；复制进 Next.js 工程外壳后即可运行，不独立安装。
@@ -212,4 +213,89 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-*版本：2026-09-16 · 基于 resume-screening 首个生产验证实例抽取*
+*版本：2026-09-16 · 基于 resume-screening 首个生产验证实例抽取 · 同日补入四闸口日志体系*
+
+---
+
+## 7. 可观测性：四闸口日志体系
+
+系统跑起来之后，真正花时间的地方不是"写功能"，而是"出了问题找不着"。这一章讲的是模板内置的日志体系：**不为每类问题埋点，只为"问题可能被吞掉的边界"设闸。** 四个闸口全部已在模板代码里实现（`src/lib/logger.ts`、`src/instrumentation.ts`、`src/app/global-error.tsx`、`src/components/ClientErrorReporter.tsx`、`src/app/api/log/client/route.ts`、`src/db/schema.sql` 的 `item_events` 表、`src/lib/process.ts` 的 `recordEvent`），新系统复制即用，零额外工作。
+
+### 7.1 核心哲学：消除"静默吞掉"，而不是穷尽式记录
+
+排障最大的敌人不是错误多，而是**错误发生了但你不知道**。一个 catch 里什么都不写的代码、一个只在浏览器 console 里闪过的红字、一次 LLM 返回了不合契约的 JSON 却被当成普通失败重试——这些问题的共同点不是"难修"，而是"根本没人看见"。
+
+所以"不漏掉任何问题"的正解不是给每一种错误类型都写日志（那是无底洞，而且日志多到没人看），而是**消除"静默吞掉"这个行为本身**：找到错误从"发生"到"消失"之间可能被吞掉的边界，在边界上设闸。只要每个边界都有收口，任何错误无论从哪里产生，最终都会在某个闸口显形。
+
+### 7.2 四闸口总览
+
+| 闸口 | 位置 | 覆盖什么问题 | 收敛掉了哪些冗余 | 落到哪 |
+|---|---|---|---|---|
+| **1 进程边界** | 后端所有 catch + 进程级兜底（`instrumentation.ts` 注册 `uncaughtException`/`unhandledRejection`） | Node 崩溃、Promise 拒绝、外部 API 超时、DB 写失败——一切服务端错误 | 不用为"网络错误""数据库错误""解析错误"分别设计日志方案；它们最终都到达某个 catch | pino 结构化 JSON → stdout + `logs/app.log`（`src/lib/logger.ts`） |
+| **2 浏览器边界** | `window.onerror` + `unhandledrejection`（ClientErrorReporter）+ React 渲染崩溃兜底（global-error.tsx） | hydration 失败、组件渲染崩溃、前端 fetch 失败、浏览器扩展注入干扰——一切只活在浏览器里的问题 | 不用按 React 错误类型（ErrorBoundary/hydration/资源加载）分别埋点；它们都是浏览器运行时错误事件 | POST `/api/log/client` → 汇入闸口1 的同一个 `logs/app.log`，排障时一处可查 |
+| **3 LLM 边界** | provider 调用层返回 `raw` 原始响应（`llm/client.ts` 的 `runLlmTask`） | zod 校验失败、响应截断、verdict 枚举异常、模型答非所问——LLM 输出层的所有"说不清哪里错" | 不用为"解析失败""字段缺失""格式异常"分别猜原因；原始响应在手，一切可溯源 | `item_events.detail.llm_raw`（由 `process.ts` 在每个 `_done` 事件里落库） |
+| **4 数据边界** | 状态迁移留痕（`process.ts` 的 `recordEvent`，每次状态跳转写一行） | 详情页空白、状态停在中间不动、"看起来处理完了但结果不对"——沉默的业务异常 | 不用为"详情为什么空""进度为什么卡住"加排查接口；事件流水本身就是答案 | `item_events` 表（`src/db/schema.sql`），按 `item_id` 索引，详情页可直接展示 |
+
+### 7.3 为什么是 4 个闸口，不是 8 个
+
+因为**大部分错误通道是彼此的下游**，在上游设闸就等于给下游全设了闸：
+
+- Node 进程崩溃、未捕获的 Promise 拒绝、外部 API 超时、磁盘写失败——听起来是四类问题，但前两类被 `uncaughtException`/`unhandledRejection` 接住，后两类最终都会 throw 进某个 `catch`。给"catch 收口 + 进程级兜底"设一个闸口，全部覆盖。
+- hydration 失败、React 组件渲染抛错、静态资源 404、浏览器扩展改 DOM 导致的脚本错误——听起来也是四类问题，但在浏览器里它们都以 `error` 事件或 React 错误边界的形态出现。给 `window.onerror` + `global-error` 设一个闸口，全部覆盖。
+
+反过来，如果按错误类型埋点（网络错误一个方案、DB 错误一个方案、解析错误一个方案……），你会得到 8 个半吊子方案，每个都要维护，而且总有一个新错误类型不在清单里。**为边界设闸，不为错误类型埋点**——边界是有限的（4 个），错误类型是无限的。
+
+### 7.4 环境维度只抓分叉点
+
+日志里带环境信息是为了回答一个问题：**"这是我代码的问题，还是环境/外部的问题？"** 回答这个问题只需要三个分叉点，模板已经全部带上：
+
+| 分叉点 | 怎么带 | 能区分什么 |
+|---|---|---|
+| dev / prod | `logger` 的 `base.env`（`NODE_ENV` 推导） | "本地热重载抽风" vs "线上真崩了" |
+| 浏览器 + 是否含扩展 | 闸口2 每条都带 `url` + `ua`（User-Agent） | "用户 Chrome 装了翻译扩展改 DOM" vs "我组件真写错了" |
+| 哪个 LLM provider | `logger` 的 `base.provider`（`LLM_PROVIDER` 环境变量） | "Ark 今天限流" vs "我 prompt 写崩了" |
+
+不要穷举所有环境变量（Node 版本、操作系统、内存、时区……）。90% 的排障用这三个分叉点就能二分定位；剩下的 10% 真需要时，`logs/app.log` 里的完整 stack 会告诉你去查什么。
+
+### 7.5 裁掉的冗余（反面教材，不要加回来）
+
+以下做法看起来"更保险"，实际上是噪音制造机或过早复杂化，模板有意不做：
+
+1. **进度轮询日志**：前端每 2s 轮询一次批次进度，如果每次都记日志，`app.log` 会被"GET /api/batches/123 → 200"刷屏，真正的错误反而被淹没。轮询是正常流量，不是事件——不记。
+2. **按 React 错误类型分别埋点**：hydration 错误一套、ErrorBoundary 一套、资源加载一套——三者都是浏览器运行时错误，闸口2 的 `window.onerror` 一网打尽。分开埋点只是多了三份要维护的代码。
+3. **为每种 Node 错误各设一套**：网络错误重试策略、DB 错误熔断、磁盘错误告警——业务系统规模没到那一步。统一的 catch 收口 + 结构化日志足够；真到需要熔断时，你会发现要改的是重试逻辑，不是日志。
+4. **过早引入 APM/Sentry**：14 个系统每个都是单进程 + SQLite + 单日志文件，`tail -f logs/app.log | jq` 就能排所有障。Sentry 的 value 在多服务/大流量场景才显现；现在引入等于给每个系统背一个外部依赖和一份告警噪音。等哪个系统真的日活上千了再说。
+
+### 7.6 踩坑记录：pino-pretty 在 Next dev 下自产噪音
+
+**症状**：dev 模式下日志系统自己抛 `Error: the worker has exited`，错误信息指向 pino 内部，查半天以为是日志配置错了。
+
+**原因**：`pino.transport({ target: 'pino-pretty' })` 把格式化跑在 worker 线程里，而 Next dev 的热重载会重建模块图，worker 被回收后 transport 再写就抛错——**日志系统为了美化输出，自己变成了错误源**，正好违反四闸口的初衷。
+
+**解法**（已在 `src/lib/logger.ts` 实现）：dev 下直接写 stdout（pino 默认 JSON，多路输出到控制台 + 文件），不挂 transport。需要美化时离线处理：
+
+```bash
+# 实时看错误级别以上
+tail -f logs/app.log | jq 'select(.level >= 50)'
+# 查某个条目的处理流水（闸口4 的落点）
+sqlite3 data.db "SELECT event, from_status, to_status, detail FROM item_events WHERE item_id = 42 ORDER BY id"
+```
+
+记住这条原则：**日志系统的第一要务是自己绝不产生噪音。** 美化是锦上添花，可靠是底线。
+
+### 7.7 新系统接入清单
+
+复制模板后，四闸口自动就位，只有两件事要确认：
+
+1. **根 layout 挂一次 `<ClientErrorReporter />`**（参考 resume-screening 的 `app/layout.tsx`）——闸口2 的前半段靠它注册。
+2. **领域 hooks 返回 `raw`**：`runLlmTask` 已经返回 `{ data, usage, raw }`，你的 `domain.ts` 把 `raw` 原样透传给 `DomainHooks.extract/score` 的返回值即可（参考 `llm/domain.example.ts` 的写法），`process.ts` 会自动把它落进 `item_events.llm_raw`。
+
+验证方式（与 resume-screening 端到端验证一致）：故意触发四个闸口各一次——
+
+```bash
+# 闸口1：让 pipeline 抛错两次（比如删掉 API key），看 logs/app.log 有 error 且 items.status='failed'
+# 闸口2：浏览器 console 里 `throw new Error('test')`，看 logs/app.log 出现 channel:'client'
+# 闸口3：把 SCORE_MODEL 换成一个不存在模型，看 item_events 里 failed 事件的 detail.llm_raw / error
+# 闸口4：随便处理一条，`SELECT * FROM item_events WHERE item_id=?` 应有 parse_start→…→score_done 完整流水
+```
+

@@ -1,10 +1,12 @@
 // ============================================================
 // 通用 LLM 调用骨架（四段式 · 第 2 段的引擎）
-// 保留 resume-screening 验证过的四个机制：
+// 保留 resume-screening 验证过的五个机制：
 //   1. 模型分层（EXTRACT 弱模型 / SCORE 强模型，env 可覆盖）
 //   2. 失败重试一次（网络抖动/限流的第一道防线）
 //   3. 鲁棒 JSON 解析（剥 markdown fence → 截取首个 {} → zod 校验）
 //   4. token 用量随结果返回（批次级成本统计的数据来源）
+//   5. raw 原始响应透传（闸口3）：zod 失败/截断/verdict 异常时，
+//      由 process.ts 落 item_events.detail.llm_raw 供溯源
 // 泛化点：领域 prompt 与 zod schema 全部抽出为参数，
 // 新系统在自己的 llm/domain.ts 里定义 prompt + schema，调用 runLlmTask 即可。
 // ============================================================
@@ -62,9 +64,13 @@ export interface LlmTask<T> {
 
 /**
  * 一次"调用 LLM 拿结构化结果"的完整流程。
+ * 返回 raw（原始响应文本）：闸口3——解析失败/输出异常时，调用方应把 raw 落库
+ * （process.ts 已示范：写入 item_events 的 detail.llm_raw），不让模型输出蒸发。
  * 用法示例见本目录 domain.example.ts。
  */
-export async function runLlmTask<T>(task: LlmTask<T>): Promise<{ data: T; usage: Usage }> {
+export async function runLlmTask<T>(
+  task: LlmTask<T>
+): Promise<{ data: T; usage: Usage; raw: string }> {
   return callWithRetry(async () => {
     const res = await getProvider().chat({
       model: task.tier === 'extract' ? EXTRACT_MODEL : SCORE_MODEL,
@@ -73,6 +79,10 @@ export async function runLlmTask<T>(task: LlmTask<T>): Promise<{ data: T; usage:
       user: task.user,
     });
     const data = parseJson(res.text, task.schema);
-    return { data, usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens } };
+    return {
+      data,
+      usage: { input_tokens: res.inputTokens, output_tokens: res.outputTokens },
+      raw: res.text,
+    };
   });
 }
