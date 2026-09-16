@@ -9,3 +9,4 @@
 | 2026-09-16 | 全局"关键阶段自动记录"约定（含技术哲学原则） | D:/omp/platform/agent/AGENTS.md §关键阶段自动记录（已 deploy 至 ~/.omp/agent/AGENTS.md） | 已记录 | 所有项目每会话自动注入；记录节点/台账/回执三条的唯一权威定义 |
 | 2026-09-16 | 项目发布：oleo42/MarketingOrPMP_VibeCoding（公开仓，SSH 别名推送） | https://github.com/oleo42/MarketingOrPMP_VibeCoding（remote: oleo42 = git@github-oleo42） | 已记录 | 方案库与后续实现的公开主页 |
 | 2026-09-16 | 凭据地图新增"多账号身份一致性"规则（建仓即设 repo-local noreply 身份） | D:/omp/platform/agent/AGENTS.md §凭据地图（已 deploy） | 已记录 | 防止再次出现发布账号与贡献者不一致 |
+| 2026-09-16 | 仓库重建：删旧仓（含悬空 Leon commit）→ oleo42 名下重建公开仓 → 推送干净历史（2 commit 全 oleo42） | https://github.com/oleo42/MarketingOrPMP_VibeCoding | 已记录 | contributors/commits API 实查均仅 oleo42，归属一致闭环 |
