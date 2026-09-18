@@ -172,7 +172,14 @@ async function main(): Promise<void> {
   assert(run.input_tokens > 0 && run.output_tokens > 0, 'token 用量已累加');
 
   // 6. 清理
-  fs.rmSync(path.dirname(tmpDb), { recursive: true, force: true });
+  // Windows may briefly retain SQLite WAL handles; cleanup is best-effort and
+  // must never turn a successful smoke run into a failure.
+  try {
+    db.close();
+    fs.rmSync(path.dirname(tmpDb), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch {
+    console.warn('  (temporary smoke DB cleanup deferred by Windows)');
+  }
 
   if (failures.length > 0) {
     console.error(`\nSMOKE FAILED: ${failures.length} 个断言失败`);
