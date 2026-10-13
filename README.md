@@ -28,8 +28,12 @@
 ![排障聊天主界面](apps/support-assistant/docs/screenshots/chat-main.png)
 
 - **即时检索 + AI 分析**：提交后左侧立即列出 top-5 相关案例（带匹配分），右侧 AI 给置信度+引用的结构化建议
-- **诚实拒答**：案例库没有的信息（如某团队联系方式），AI 明说"案例中没有记录，我无法编造"——检索增强的可靠性在界面上可直接验证
+- **多轮追问**：同一对话继续深挖，历史自动带入上下文
 - **评测可辩护**：recall@5=100%、MRR=0.979（2026-10-08 实测），附 titleWeight=0 消融证真 + 三阶段评测收敛 + 诚实边界声明
+
+**诚实拒答（核心差异）**：案例库没有的信息，AI 明说"我不知道"而不是编。追问"怎么联系 EEE"，AI 置信度 85% 却拒答"案例中没有联系方式，我无法编造联系方法"——回答被检索语料严格约束，不幻觉：
+
+![追问诚实拒答](apps/support-assistant/docs/screenshots/chat-followup.png)
 
 底层是「词法检索+标题索引→LLM生成→评委打分」RAG 闭环 → [产品文档](apps/support-assistant/README.md) · `cd apps/support-assistant && npm run dev`
 
