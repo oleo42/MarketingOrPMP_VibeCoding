@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+.next/
+
+# Env
+.env
+.env.local
+
+# 大数据文件 / 中间产物(README 有复现命令,不进仓)
+pipeline/data/osc_train.parquet
+pipeline/data/ce_embed_pos.npy
+pipeline/data/ce_reviews.jsonl
+pipeline/data/ce_sentiment.jsonl
+pipeline/data/ce_sentiment_test.jsonl
+
+# 日志
+*.log
+logs/
