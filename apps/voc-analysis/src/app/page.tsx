@@ -69,13 +69,20 @@ export default function Page() {
   const trend = loadTrend();
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">用户之声 · 卖点共鸣 / 吐槽双面榜</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          数据源：{data.source} · 方法：方面级关键词匹配（声量×情感交叉）· 好评{' '}
-          <span className="font-semibold text-emerald-600">{data.n_positive}</span> 条 / 差评{' '}
-          <span className="font-semibold text-red-500">{data.n_negative}</span> 条 · 生成于 {data.generated}
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">用户之声 · 卖点共鸣 / 吐槽双面榜</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            数据源：{data.source} · 方法：方面级关键词匹配（声量×情感交叉）· 好评{' '}
+            <span className="font-semibold text-emerald-600">{data.n_positive}</span> 条 / 差评{' '}
+            <span className="font-semibold text-red-500">{data.n_negative}</span> 条 · 生成于 {data.generated}
+          </p>
+        </div>
+        <a href="/api/report"
+          className="shrink-0 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          title="下载 Markdown 报告（核心结论+双面榜+品类矩阵+趋势+方法），GTM 标准交付物">
+          ⬇ 导出报告
+        </a>
       </header>
       <div className="mb-5">
         <IngestCard />

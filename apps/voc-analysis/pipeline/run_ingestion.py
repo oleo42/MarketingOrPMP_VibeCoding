@@ -103,6 +103,8 @@ def main():
     run_step(job, "exporting", ["pipeline/export_trend.py",
                                 "--data", "pipeline/data/ce_sentiment.jsonl",
                                 "--out", "pipeline/data/trend_ui.json"])
+    # 报告导出(Markdown,随数据刷新)
+    run_step(job, "exporting", ["pipeline/export_report.py"])
     set_status(job, "done", added=add)
     print(f"[done] job={job} added={add}")
 
