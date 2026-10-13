@@ -3,14 +3,21 @@ import path from 'path';
 import Board from '@/components/Board';
 import IngestCard from '@/components/IngestCard';
 
-export type CategoryStat = { volume: number; rate: number };
+export type CategoryStat = { pos: number; neg: number; rate: number; net: number };
 export type Cluster = {
   id: string;
   name: string;
-  confidence: number;
-  reviewCount: number;
+  posVolume: number;
+  negVolume: number;
+  posRate: number;
+  negRate: number;
+  netResonance: number;
+  posExemplars: string[];
+  negExemplars: string[];
+  reviewCount: number; // = posVolume (兼容)
   hitRate: number;
-  exemplars: string[];
+  exemplars: string[]; // = posExemplars (兼容)
+  confidence: number;
   byCategory: Record<string, CategoryStat>;
   needsReview: boolean;
 };
@@ -20,8 +27,10 @@ export type BoardData = {
   source: string;
   sentiment: string;
   n_positive: number;
+  n_negative: number;
   categories: string[];
-  hits_per_doc_dist: Record<string, number>;
+  pos_hits_per_doc_dist: Record<string, number>;
+  neg_hits_per_doc_dist: Record<string, number>;
   clusters: Cluster[];
 };
 
@@ -39,10 +48,11 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold">用户之声 · 卖点共鸣榜</h1>
+        <h1 className="text-2xl font-bold">用户之声 · 卖点共鸣 / 吐槽双面榜</h1>
         <p className="mt-1 text-sm text-gray-600">
-          数据源：{data.source} · 方法：{data.method} · 正向评价{' '}
-          <span className="font-semibold text-gray-900">{data.n_positive}</span> 条 · 生成于 {data.generated}
+          数据源：{data.source} · 方法：方面级关键词匹配（声量×情感交叉）· 好评{' '}
+          <span className="font-semibold text-emerald-600">{data.n_positive}</span> 条 / 差评{' '}
+          <span className="font-semibold text-red-500">{data.n_negative}</span> 条 · 生成于 {data.generated}
         </p>
       </header>
       <div className="mb-5">

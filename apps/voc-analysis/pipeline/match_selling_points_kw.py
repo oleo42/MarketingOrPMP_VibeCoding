@@ -32,52 +32,64 @@ def match(text, keywords):
     return any(k in text for k in keywords)
 
 
+def _hits(docs, kw):
+    return [i for i, (_, t) in enumerate(docs) if match(t, kw)]
+
+
 def run(data_path, out_path):
     rows = [json.loads(l) for l in open(data_path, encoding="utf-8")]
-    pos = [r for r in rows if r.get("sentiment") == "pos"]
-    docs = [(r.get("cat", ""), " ".join(r["text"].split())) for r in pos]
-    print(f"[load] 正向评价 {len(docs)} 条")
+    pos = [(r.get("cat", ""), " ".join(r["text"].split())) for r in rows if r.get("sentiment") == "pos"]
+    neg = [(r.get("cat", ""), " ".join(r["text"].split())) for r in rows if r.get("sentiment") == "neg"]
+    print(f"[load] 正向 {len(pos)} 条 | 负向 {len(neg)} 条")
 
     dims = list(SELLING_POINT_KEYWORDS.keys())
-    # 每卖点命中
     board = []
-    hits_per_doc = []
     for dim in dims:
         kw = SELLING_POINT_KEYWORDS[dim]
-        hit_idx = [i for i, (_, t) in enumerate(docs) if match(t, kw)]
+        p_idx = _hits(pos, kw)
+        n_idx = _hits(neg, kw)
+        pv, nv = len(p_idx), len(n_idx)
+        total = pv + nv
         board.append({
             "selling_point": dim,
-            "volume": len(hit_idx),
-            "hit_rate": round(len(hit_idx) / len(docs) * 100, 1),
+            # 共鸣(好评)侧
+            "pos_volume": pv,
+            "pos_rate": round(pv / max(len(pos), 1) * 100, 1),
+            "pos_exemplars": [pos[i][1] for i in p_idx[:3]],
+            # 吐槽(差评)侧
+            "neg_volume": nv,
+            "neg_rate": round(nv / max(len(neg), 1) * 100, 1),
+            "neg_exemplars": [neg[i][1] for i in n_idx[:3]],
+            # 净共鸣度 = 好评占比(该卖点所有提及里好评的比例)
+            "net_resonance": round(pv / total, 3) if total else 0,
+            "volume": total,  # 兼容旧字段(总提及)
+            "hit_rate": round(total / max(len(pos) + len(neg), 1) * 100, 1),
             "keywords": kw,
-            # 代表引文：最短且最聚焦的(信息密度高),取前 3
-            "exemplars": [docs[i][1] for i in sorted(hit_idx, key=lambda i: len(docs[i][1]))[:3]],
-            "sample_random": [docs[i][1] for i in hit_idx[:3]],
         })
-    board.sort(key=lambda b: -b["volume"])
+    # 主排序: 好评声量(共鸣榜主视角)
+    board.sort(key=lambda b: -b["pos_volume"])
 
-    # 每条评价命中卖点数分布
-    for _, t in docs:
-        h = sum(1 for dim in dims if match(t, SELLING_POINT_KEYWORDS[dim]))
-        hits_per_doc.append(h)
-    dist = Counter(hits_per_doc)
+    # 每条评价命中卖点数分布(pos+neg 各自)
+    def dist(docs):
+        c = Counter(sum(1 for d in dims if match(t, SELLING_POINT_KEYWORDS[d])) for _, t in docs)
+        return dict(sorted(c.items()))
 
     result = {
-        "method": "multi-label keyword match",
-        "n_positive": len(docs),
-        "hits_per_doc_dist": dict(sorted(dist.items())),
+        "method": "multi-label keyword match (aspect-based, pos/neg cross)",
+        "n_positive": len(pos),
+        "n_negative": len(neg),
+        "pos_hits_per_doc_dist": dist(pos),
+        "neg_hits_per_doc_dist": dist(neg),
         "board": board,
     }
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     print(f"[save] → {out_path}")
 
-    print(f"\n===== 卖点共鸣榜（关键词规则）=====")
-    print(f"每条命中卖点数分布: {dict(sorted(dist.items()))}")
+    print(f"\n===== 卖点共鸣/吐槽双面榜 =====")
+    print(f"{'卖点':<6} {'好评':>5} {'差评':>5} {'净共鸣':>7}")
     for b in board:
-        print(f"\n{b['selling_point']} | 声量 {b['volume']} ({b['hit_rate']}%)")
-        for e in b["sample_random"][:2]:
-            print(f"  · {e[:55]}")
+        print(f"{b['selling_point']:<6} {b['pos_volume']:>5} {b['neg_volume']:>5} {b['net_resonance']:>7.2f}")
 
 
 if __name__ == "__main__":
