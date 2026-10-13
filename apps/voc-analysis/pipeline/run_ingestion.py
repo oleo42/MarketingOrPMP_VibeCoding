@@ -99,6 +99,10 @@ def main():
                                 "--sp", "pipeline/data/selling_points.json",
                                 "--data", "pipeline/data/ce_sentiment.jsonl",
                                 "--out", "pipeline/data/sp_board_ui.json"])
+    # 趋势导出(真实 date 用真实月份,无 date 合成占位)
+    run_step(job, "exporting", ["pipeline/export_trend.py",
+                                "--data", "pipeline/data/ce_sentiment.jsonl",
+                                "--out", "pipeline/data/trend_ui.json"])
     set_status(job, "done", added=add)
     print(f"[done] job={job} added={add}")
 

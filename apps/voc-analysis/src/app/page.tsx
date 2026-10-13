@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import Board from '@/components/Board';
 import IngestCard from '@/components/IngestCard';
+import TrendCard from '@/components/TrendCard';
 
 export type CategoryStat = { pos: number; neg: number; rate: number; net: number };
 export type Cluster = {
@@ -34,17 +35,38 @@ export type BoardData = {
   clusters: Cluster[];
 };
 
+export type TrendPoint = { month: string; pos: number; neg: number; volume: number; net: number | null };
+export type TrendSeries = { cat: string; points: TrendPoint[] };
+export type TrendData = {
+  generated: string;
+  simulated: boolean;
+  note: string;
+  months: string[];
+  categories: string[];
+  series: TrendSeries[];
+};
+
 function loadBoard(): BoardData {
   const p = path.join(process.cwd(), 'pipeline', 'data', 'sp_board_ui.json');
   return JSON.parse(readFileSync(p, 'utf-8')) as BoardData;
 }
 
-// 上传新数据会改写 sp_board_ui.json，必须每次请求重读——禁用静态预渲染
+function loadTrend(): TrendData | null {
+  const p = path.join(process.cwd(), 'pipeline', 'data', 'trend_ui.json');
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as TrendData;
+  } catch {
+    return null; // trend_ui.json 未生成前容错（老环境）
+  }
+}
+
+// 上传新数据会改写 sp_board_ui.json / trend_ui.json，必须每次请求重读——禁用静态预渲染
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default function Page() {
   const data = loadBoard();
+  const trend = loadTrend();
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <header className="mb-6">
@@ -58,6 +80,11 @@ export default function Page() {
       <div className="mb-5">
         <IngestCard />
       </div>
+      {trend && (
+        <div className="mb-5">
+          <TrendCard data={trend} />
+        </div>
+      )}
       <Board data={data} />
     </main>
   );
