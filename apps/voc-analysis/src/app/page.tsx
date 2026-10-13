@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import Board from '@/components/Board';
+import IngestCard from '@/components/IngestCard';
 
 export type CategoryStat = { volume: number; rate: number };
 export type Cluster = {
@@ -29,6 +30,10 @@ function loadBoard(): BoardData {
   return JSON.parse(readFileSync(p, 'utf-8')) as BoardData;
 }
 
+// 上传新数据会改写 sp_board_ui.json，必须每次请求重读——禁用静态预渲染
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function Page() {
   const data = loadBoard();
   return (
@@ -40,6 +45,9 @@ export default function Page() {
           <span className="font-semibold text-gray-900">{data.n_positive}</span> 条 · 生成于 {data.generated}
         </p>
       </header>
+      <div className="mb-5">
+        <IngestCard />
+      </div>
       <Board data={data} />
     </main>
   );

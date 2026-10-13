@@ -18,6 +18,10 @@ pipeline/data/ce_reviews.jsonl
 pipeline/data/ce_sentiment.jsonl
 pipeline/data/ce_sentiment_test.jsonl
 
+# 上传运行期产物(CSV/jsonl/status/log)
+pipeline/data/uploads/
+
 # 日志
 *.log
 logs/
+tsconfig.tsbuildinfo
